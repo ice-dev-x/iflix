@@ -1,11 +1,12 @@
 {
   "id": "iflix",
   "name": "iFlix",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "apiVersion": 6,
   "browser": true,
   "entry": "plugin.js",
   "icon": "icon.png",
+  "author": "sadmachine",
   "description": "Películas y series en español latino, castellano y subtitulado.",
   "hosts": [
     "pelispop.mov",

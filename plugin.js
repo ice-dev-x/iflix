@@ -42,39 +42,100 @@ export async function search(query) {
   return extractItems(await r.text());
 }
 
-// --- PANTALLA PRINCIPAL (INICIO) ---
+// --- PANTALLA PRINCIPAL (INICIO LIMPIO Y MINIMALISTA) ---
 export async function home() {
-  const r = await kino.fetch("https://pelispop.mov/");
-  if (!r.ok) throw kino.error("unavailable", "No se pudo cargar Pelispop");
-  const html = await r.text();
-  const items = extractItems(html);
+  const urls = [
+    "https://pelispop.mov/",
+    "https://pelispop.mov/series"
+  ];
 
+  const responses = await Promise.all(
+    urls.map(url => kino.fetch(url).catch(() => null))
+  );
+
+  const rows = [];
+
+  // 1. Últimas películas
+  if (responses[0] && responses[0].ok) {
+    const html = await responses[0].text();
+    const items = extractItems(html).filter(i => i.kind === 'movie');
+    if (items.length > 0) {
+      rows.push({
+        id: "ultimas-peliculas",
+        title: "Peliculas recientes",
+        ref: "browse:peliculas",
+        genre: "peliculas",
+        items: items.slice(0, 20)
+      });
+    }
+  }
+
+  // 2. Capítulos recientes de series
+  if (responses[1] && responses[1].ok) {
+    const html = await responses[1].text();
+    const items = extractItems(html).filter(i => i.kind === 'series');
+    if (items.length > 0) {
+      rows.push({
+        id: "capitulos-recientes",
+        title: "Capitulos recientes",
+        ref: "browse:series",
+        genre: "series",
+        items: items.slice(0, 20)
+      });
+    }
+  }
+
+  // 3. Destacados (combinados de la página principal)
+  if (responses[0] && responses[0].ok) {
+    const html = await responses[0].text();
+    const items = extractItems(html);
+    if (items.length > 0) {
+      rows.push({
+        id: "destacados",
+        title: "Destacados",
+        ref: "browse:novedades",
+        genre: "peliculas",
+        items: items.slice(0, 20)
+      });
+    }
+  }
+
+  return rows;
+}
+
+// --- 10 CATEGORÍAS LIMPIAS (SIN EMOJIS) ---
+export async function categories() {
   return [
-    { 
-      id: "novedades", 
-      title: "Agregados Recientemente", 
-      ref: "browse:novedades", // El ref le dice a la app qué cargar si presionan "Ver más"
-      genre: "peliculas", 
-      items: items.slice(0, 30) // Mostramos los primeros 30 en la fila principal
-    },
-    { id: "peliculas", title: "Películas", ref: "browse:peliculas", genre: "peliculas", items: [] },
-    { id: "series", title: "Series", ref: "browse:series", genre: "series", items: [] }
+    { id: "peliculas", title: "Peliculas", ref: "browse:peliculas" },
+    { id: "series", title: "Series", ref: "browse:series" },
+    { id: "accion", title: "Accion", ref: "browse:accion" },
+    { id: "ciencia-ficcion", title: "Ciencia Ficcion", ref: "browse:ciencia-ficcion" },
+    { id: "comedia", title: "Comedia", ref: "browse:comedia" },
+    { id: "terror", title: "Terror", ref: "browse:terror" },
+    { id: "drama", title: "Drama", ref: "browse:drama" },
+    { id: "animacion", title: "Animacion", ref: "browse:animacion" },
+    { id: "aventura", title: "Aventura", ref: "browse:aventura" },
+    { id: "suspenso", title: "Suspenso", ref: "browse:suspenso" }
   ];
 }
 
-// --- VER MÁS (PAGINACIÓN) ---
+// --- NAVEGACIÓN Y PAGINACIÓN POR CATEGORÍA ---
 export async function browse(ref, cursor) {
   const page = parseInt(cursor, 10) || 1;
-  let url = "https://pelispop.mov/";
+  let url = "";
 
-  // Dependiendo del 'ref' que mandó la fila de Home, construimos la URL
-  if (ref === "browse:peliculas") {
+  if (ref === "browse:novedades") {
+    url = `https://pelispop.mov/page/${page}`;
+  } else if (ref === "browse:peliculas") {
     url = `https://pelispop.mov/peliculas/page/${page}`;
   } else if (ref === "browse:series") {
     url = `https://pelispop.mov/series/page/${page}`;
-  } else {
-    url = `https://pelispop.mov/page/${page}`; // Novedades
+  } else if (ref.startsWith("browse:")) {
+    const genre = ref.split(":")[1];
+    url = `https://pelispop.mov/genero/${genre}/page/${page}`;
   }
+
+  if (!url) return { items: [] };
 
   const r = await kino.fetch(url);
   if (!r.ok) return { items: [] };
@@ -83,7 +144,6 @@ export async function browse(ref, cursor) {
 
   return {
     items: items,
-    // Si encontramos elementos, le decimos a Kino que la siguiente página es la actual + 1
     next: items.length > 0 ? String(page + 1) : null 
   };
 }
@@ -231,26 +291,39 @@ export async function resolve(ref) {
       let streamUrl = null;
       let streamHeaders = { "Referer": e.url };
 
-      // 1. Camino Rápido: Intentamos sacar el .m3u8 directamente del código fuente (como Pelispanda)
+      // 1. Camino Rápido: Buscar patrones de video directos en el HTML del embed
       try {
         const rPage = await kino.fetch(e.url, { headers: { "Referer": "https://pelispop.mov/" } });
         if (rPage.ok) {
           const text = (await rPage.text()).replace(/\\\//g, "/");
-          // Buscamos cualquier enlace que termine en .m3u8 o .mp4
-          const m = text.match(/https?:\/\/[^\s"'\\)<>]+?\.(?:m3u8|mp4)(?:\?[^\s"'\\)<>]*)?/i);
-          if (m) streamUrl = m[0];
+          
+          // Buscamos patrones específicos según el tipo de servidor
+          let m = null;
+          if (e.url.includes("voe.sx")) {
+            // Voe a veces oculta el .mp4 o hls en una variable 'sources' o 'file'
+            m = text.match(/'hls':\s*'([^']+)'/) || text.match(/"file":\s*"([^"]+)"/) || text.match(/https?:\/\/[^\s"'\\<>]+?\.(?:m3u8|mp4)/i);
+          } else if (e.url.includes("hglink.to") || e.url.includes("streamwish")) {
+            m = text.match(/file:\s*"([^"]+\.m3u8[^"]*)"/) || text.match(/https?:\/\/[^\s"'\\<>]+?\.(?:m3u8|mp4)/i);
+          } else {
+            m = text.match(/https?:\/\/[^\s"'\\<>]+?\.(?:m3u8|mp4)(?:\?[^\s"'\\<>]*)?/i);
+          }
+
+          if (m) streamUrl = m[1] || m[0];
         }
       } catch (err) {}
 
-      // 2. Plan B: Si el camino rápido falla, usamos el navegador oculto
+      // 2. Plan B: Navegador oculto con más tiempo de espera (vital para Voe y Streamwish)
       if (!streamUrl) {
         const page = await kino.browser.capture(e.url, { 
           headers: { "Referer": "https://pelispop.mov/" },
-          timeoutMs: 15000 
+          timeoutMs: 25000 // Subimos a 25 segundos para darles tiempo a sortear sus scripts
         });
         if (!page || !page.media || !page.media.length) throw new Error("No hay video en este servidor");
-        streamUrl = page.media[0].url;
-        if (page.media[0].headers) streamHeaders = page.media[0].headers;
+        
+        // Filtramos el mejor medio capturado (priorizando m3u8 o mp4)
+        const validMedia = page.media.find(m => m.url.includes('.m3u8') || m.url.includes('.mp4')) || page.media[0];
+        streamUrl = validMedia.url;
+        if (validMedia.headers) streamHeaders = validMedia.headers;
       }
 
       const stream = { url: streamUrl, label: e.label, headers: streamHeaders };
