@@ -1,0 +1,39 @@
+{
+  "id": "iflix",
+  "name": "iFlix",
+  "version": "1.0.0",
+  "apiVersion": 6,
+  "entry": "plugin.js",
+  "icon": "icon.png",
+  "description": "Películas y series en español latino, castellano y subtitulado.",
+  "hosts": [
+    "pelispop.mov",
+    "*.pelispop.mov",
+    "embed69.org",
+    "*.embed69.org",
+    "voe.sx",
+    "*.voe.sx",
+    "filemoon.sx",
+    "*.filemoon.sx",
+    "doodstream.com",
+    "*.doodstream.com",
+    "streamwish.com",
+    "*.streamwish.com",
+    "vidhide.com",
+    "*.vidhide.com"
+  ],
+  "streamHosts": "any",
+  "capabilities": [
+    "search",
+    "home",
+    "browse",
+    "episodes",
+    "resolve",
+    "download"
+  ],
+  "categories": [
+    "movies",
+    "series"
+  ],
+  "color": "#9e0505"
+}
