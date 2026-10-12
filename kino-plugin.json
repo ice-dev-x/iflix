@@ -1,7 +1,7 @@
 {
   "id": "iflix",
   "name": "iFlix",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "apiVersion": 6,
   "browser": true,
   "entry": "plugin.js",
@@ -14,7 +14,8 @@
     "onAccent": "#0f172a",
     "background": "#0b131d",
     "surface": "#131f30",
-    "highlight": "#38bdf8",
+    "highlight": "#38bdf8"
+  },
   "hosts": [
     "pelispop.mov",
     "*.pelispop.mov",
