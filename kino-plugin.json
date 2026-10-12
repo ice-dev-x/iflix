@@ -1,8 +1,9 @@
 {
   "id": "iflix",
   "name": "iFlix",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "apiVersion": 6,
+  "browser": true,
   "entry": "plugin.js",
   "icon": "icon.png",
   "description": "Películas y series en español latino, castellano y subtitulado.",
@@ -35,5 +36,5 @@
     "movies",
     "series"
   ],
-  "color": "#9e0505"
+  "color": "#050505"
 }

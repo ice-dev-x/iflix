@@ -134,64 +134,54 @@ export async function episodes(ref) {
   };
 }
 export async function resolve(ref) {
-  // 1. Descargamos la página principal de la película (El cascarón)
+  // --- FASE 1: COPIA PEREZOSA (El usuario eligió un servidor del menú) ---
+  // Si el ref trae un "|", significa que ya desencriptamos antes y solo queremos atrapar el video
+  if (ref.includes("|")) {
+    const embedUrl = ref.split("|")[1];
+    const page = await kino.browser.capture(embedUrl, { timeoutMs: 20000 });
+    if (!page || !page.media || !page.media.length) {
+      throw kino.error("unavailable", "El servidor no respondió con un video");
+    }
+    return { url: page.media[0].url, headers: page.media[0].headers };
+  }
+
+  // --- FASE 2: DESENCRIPTAR SERVIDORES (Primera vez que se abre la película) ---
   const r1 = await kino.fetch(ref);
   if (!r1.ok) throw new Error(`unavailable: Error al cargar Pelispop: ${r1.status}`);
   const html1 = await r1.text();
 
-  // 2. Buscamos la URL del iframe del reproductor (Embed69)
   let iframeUrl = null;
-  
-  // Expresiones regulares para cazar el iframe (ya sea en src o data-src)
   const iframeMatch = html1.match(/<iframe[^>]+src="([^"]+)"/i);
   const dataSrcMatch = html1.match(/data-src="([^"]+)"/i);
+  if (iframeMatch) iframeUrl = iframeMatch[1];
+  else if (dataSrcMatch) iframeUrl = dataSrcMatch[1];
 
-  if (iframeMatch) {
-    iframeUrl = iframeMatch[1];
-  } else if (dataSrcMatch) {
-    iframeUrl = dataSrcMatch[1];
-  }
-
-  if (!iframeUrl) {
-    throw new Error("not_found: No se encontró el iframe del reproductor en la página");
-  }
-
- // Asegurarnos de que la URL del iframe esté completa
+  if (!iframeUrl) throw new Error("not_found: No se encontró el iframe del reproductor");
   if (iframeUrl.startsWith("//")) {
     iframeUrl = "https:" + iframeUrl;
   } else if (iframeUrl.startsWith("/")) {
-    // Tomamos el dominio base automáticamente (https://pelispop.mov) y le pegamos la ruta
-    const base = new URL(ref).origin; 
-    iframeUrl = base + iframeUrl;
+    iframeUrl = new URL(ref).origin + iframeUrl;
   }
 
-  // 3. Descargamos el código fuente del reproductor real
-  const r2 = await kino.fetch(iframeUrl, {
-    headers: { "Referer": ref } // Pasamos el Referer para que no nos bloqueen
-  });
+  const r2 = await kino.fetch(iframeUrl, { headers: { "Referer": ref } });
   if (!r2.ok) throw new Error(`unavailable: Error al cargar el reproductor: ${r2.status}`);
   const html = await r2.text();
 
-  // 4. Ahora sí, extraemos las variables del acertijo del reproductor
   const challengeMatch = html.match(/POW_CHALLENGE\s*=\s*'([^']+)'/);
   const difficultyMatch = html.match(/POW_DIFFICULTY\s*=\s*(\d+)/);
   const saltMatch = html.match(/POW_SALT\s*=\s*'([^']+)'/);
   const dataLinkMatch = html.match(/let\s+dataLink\s*=\s*(\[\{.*\}\]);/);
 
-  if (!challengeMatch || !dataLinkMatch) {
-    throw new Error("not_found: No se encontró el sistema de encriptación en el iframe");
-  }
+  if (!challengeMatch || !dataLinkMatch) throw new Error("not_found: No se encontró el sistema de encriptación");
 
   const challenge = challengeMatch[1];
   const difficulty = parseInt(difficultyMatch[1], 10);
   const salt = saltMatch[1];
   const dataLink = JSON.parse(dataLinkMatch[1]);
 
-  // 5. Rompemos el acertijo (Proof of Work) nativamente
   let nonce = 0;
   const prefix = '0'.repeat(difficulty);
   let keyHex = "";
-
   while (nonce < 1000000) {
     const hash = kino.crypto.hash("sha256", challenge + nonce);
     if (hash.startsWith(prefix)) {
@@ -201,7 +191,6 @@ export async function resolve(ref) {
     nonce++;
   }
 
-  // 6. Función interna para desencriptar AES-CBC
   function decryptLink(encryptedBase64) {
     try {
       const rawStr = atob(encryptedBase64);
@@ -209,32 +198,21 @@ export async function resolve(ref) {
       for (let i = 0; i < 16; i++) {
         ivHex += rawStr.charCodeAt(i).toString(16).padStart(2, '0');
       }
-      const cipherBase64 = btoa(rawStr.slice(16));
-
       return kino.crypto.decrypt("aes-256-cbc", {
-        key: keyHex,
-        keyEncoding: "hex",
-        iv: ivHex,
-        ivEncoding: "hex",
-        data: cipherBase64,
-        inputEncoding: "base64",
-        outputEncoding: "utf8"
+        key: keyHex, keyEncoding: "hex", iv: ivHex, ivEncoding: "hex",
+        data: btoa(rawStr.slice(16)), inputEncoding: "base64", outputEncoding: "utf8"
       });
-    } catch (e) {
-      return null;
-    }
+    } catch (e) { return null; }
   }
 
-  // 7. Desencriptamos todos los enlaces de video
-  const servidoresExtras = [];
-
+  const embeds = [];
   for (const file of dataLink) {
     const idioma = file.video_language || "LAT"; 
     for (const embed of (file.sortedEmbeds || [])) {
       if (embed.link) {
         const urlReal = decryptLink(embed.link);
         if (urlReal) {
-          servidoresExtras.push({
+          embeds.push({
             label: `${idioma} -${embed.servername}`,
             url: urlReal.replace(/`/g, '').trim()
           });
@@ -243,15 +221,39 @@ export async function resolve(ref) {
     }
   }
 
-  if (servidoresExtras.length === 0) {
-    throw new Error("not_found: No se encontraron servidores descifrados");
+  if (embeds.length === 0) throw new Error("not_found: No se encontraron servidores descifrados");
+
+  // --- FASE 3: ATRAPAR EL VIDEO REAL Y PREPARAR ALTERNATIVAS PEREZOSAS ---
+  let lastErr = null;
+  for (let i = 0; i < embeds.length; i++) {
+    const e = embeds[i];
+    try {
+      // Capturamos el primer servidor que responda
+      const page = await kino.browser.capture(e.url, { timeoutMs: 20000 });
+      if (!page || !page.media || !page.media.length) throw new Error("No hay video en este servidor");
+
+      const stream = {
+        url: page.media[0].url,
+        label: e.label
+      };
+      if (page.media[0].headers) stream.headers = page.media[0].headers;
+
+      // Armamos las copias perezosas (lazy copies) para los demás servidores
+      const alts = [];
+      for (let j = 0; j < embeds.length; j++) {
+        if (j === i) continue;
+        alts.push({
+          label: embeds[j].label,
+          ref: `${ref}|${embeds[j].url}`
+        });
+      }
+      if (alts.length) stream.alternatives = alts;
+
+      return stream;
+    } catch (err) {
+      lastErr = err; // Si Voe falla, el bucle intenta con el siguiente (ej. Vidhide)
+    }
   }
-
-  const servidorPrincipal = servidoresExtras.shift();
-
-  return {
-    url: servidorPrincipal.url,
-    label: servidorPrincipal.label,
-    alternatives: servidoresExtras
-  };
+  
+  throw lastErr || kino.error("unavailable", "Ningún servidor respondió con video");
 }
