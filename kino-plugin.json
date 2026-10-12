@@ -1,7 +1,7 @@
 {
   "id": "iflix",
   "name": "iFlix",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "apiVersion": 6,
   "browser": true,
   "entry": "plugin.js",
@@ -21,7 +21,11 @@
     "streamwish.com",
     "*.streamwish.com",
     "vidhide.com",
-    "*.vidhide.com"
+    "*.vidhide.com",
+    "morencius.com",
+    "*.morencius.com",
+    "hglink.to",
+    "*.hglink.to"
   ],
   "streamHosts": "any",
   "capabilities": [

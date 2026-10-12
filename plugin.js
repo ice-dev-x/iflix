@@ -228,30 +228,44 @@ export async function resolve(ref) {
   for (let i = 0; i < embeds.length; i++) {
     const e = embeds[i];
     try {
-      // Capturamos el primer servidor que responda
-      const page = await kino.browser.capture(e.url, { timeoutMs: 20000 });
-      if (!page || !page.media || !page.media.length) throw new Error("No hay video en este servidor");
+      let streamUrl = null;
+      let streamHeaders = { "Referer": e.url };
 
-      const stream = {
-        url: page.media[0].url,
-        label: e.label
-      };
-      if (page.media[0].headers) stream.headers = page.media[0].headers;
+      // 1. Camino Rápido: Intentamos sacar el .m3u8 directamente del código fuente (como Pelispanda)
+      try {
+        const rPage = await kino.fetch(e.url, { headers: { "Referer": "https://pelispop.mov/" } });
+        if (rPage.ok) {
+          const text = (await rPage.text()).replace(/\\\//g, "/");
+          // Buscamos cualquier enlace que termine en .m3u8 o .mp4
+          const m = text.match(/https?:\/\/[^\s"'\\)<>]+?\.(?:m3u8|mp4)(?:\?[^\s"'\\)<>]*)?/i);
+          if (m) streamUrl = m[0];
+        }
+      } catch (err) {}
 
-      // Armamos las copias perezosas (lazy copies) para los demás servidores
+      // 2. Plan B: Si el camino rápido falla, usamos el navegador oculto
+      if (!streamUrl) {
+        const page = await kino.browser.capture(e.url, { 
+          headers: { "Referer": "https://pelispop.mov/" },
+          timeoutMs: 15000 
+        });
+        if (!page || !page.media || !page.media.length) throw new Error("No hay video en este servidor");
+        streamUrl = page.media[0].url;
+        if (page.media[0].headers) streamHeaders = page.media[0].headers;
+      }
+
+      const stream = { url: streamUrl, label: e.label, headers: streamHeaders };
+
+      // Armamos las alternativas perezosas (lazy copies)
       const alts = [];
       for (let j = 0; j < embeds.length; j++) {
         if (j === i) continue;
-        alts.push({
-          label: embeds[j].label,
-          ref: `${ref}|${embeds[j].url}`
-        });
+        alts.push({ label: embeds[j].label, ref: `${ref}|${embeds[j].url}` });
       }
       if (alts.length) stream.alternatives = alts;
 
       return stream;
     } catch (err) {
-      lastErr = err; // Si Voe falla, el bucle intenta con el siguiente (ej. Vidhide)
+      lastErr = err;
     }
   }
   
