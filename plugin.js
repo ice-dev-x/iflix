@@ -211,7 +211,7 @@ export async function section({ tab } = {}) {
       { id: "ciencia-ficcion", title: "Ciencia Ficción", path: "/generos/ciencia-ficcion" },
       { id: "drama", title: "Drama", path: "/generos/drama" },
       { id: "animacion", title: "Animación", path: "/generos/animacion" },
-      { id: "western", title: "Western", path: "browse:genero:western" },
+      { id: "western", title: "Western", path: "/generos/western" },
     ];
 
     for (const g of genrePaths) {
