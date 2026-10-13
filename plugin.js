@@ -123,41 +123,6 @@ export async function categories() {
   ];
 }
 
-// --- BROWSE (PAGINACIÓN EXACTA Y SCROLL INFINITO CORREGIDO) ---
-export async function browse(ref, cursor) {
-  const page = parseInt(cursor, 10) || 1;
-  
-  if (!ref) return { items: [] };
-
-  // Si por alguna razón extraña llega un ref antiguo, lo limpiamos para evitar el error
-  let cleanRef = ref;
-  if (ref.startsWith("browse:")) {
-    const parts = ref.split(":");
-    cleanRef = `/generos/${parts[parts.length - 1]}`;
-  }
-
-  let url = `https://pelispop.mov${cleanRef}`;
-
-  // Usamos la estructura de paginación con ?page=2 o &page=2
-  if (page > 1) {
-    url += url.includes("?") ? `&page=${page}` : `?page=${page}`;
-  }
-
-  const r = await kino.fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
-  if (!r.ok) return { items: [] };
-  
-  const items = extractItems(await r.text());
-
-  if (cleanRef === "/" && page === 1) {
-    return { items, next: null };
-  }
-
-  return {
-    items: items,
-    next: items.length >= 10 ? String(page + 1) : null 
-  };
-}
-
 // --- SISTEMA DE PESTAÑAS (INCLUYENDO "POPULARES" EN TODAS) ---
 export async function section({ tab } = {}) {
   const tabs = [

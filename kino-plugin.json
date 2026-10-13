@@ -1,7 +1,7 @@
 {
   "id": "iflix",
   "name": "iFlix",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "apiVersion": 6,
   "browser": true,
   "entry": "plugin.js",
