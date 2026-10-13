@@ -103,23 +103,21 @@ export async function home() {
   return rows;
 }
 
-// --- 10 CATEGORÍAS LIMPIAS (SIN EMOJIS) ---
+// --- PESTAÑA NATIVA DE CATEGORÍAS (LA CUADRÍCULA DE GÉNEROS MEZCLADOS) ---
 export async function categories() {
   return [
-    { id: "peliculas", title: "Peliculas", ref: "browse:peliculas" },
-    { id: "series", title: "Series", ref: "browse:series" },
-    { id: "accion", title: "Accion", ref: "browse:accion" },
-    { id: "ciencia-ficcion", title: "Ciencia Ficcion", ref: "browse:ciencia-ficcion" },
-    { id: "comedia", title: "Comedia", ref: "browse:comedia" },
-    { id: "terror", title: "Terror", ref: "browse:terror" },
-    { id: "drama", title: "Drama", ref: "browse:drama" },
-    { id: "animacion", title: "Animacion", ref: "browse:animacion" },
-    { id: "aventura", title: "Aventura", ref: "browse:aventura" },
-    { id: "suspenso", title: "Suspenso", ref: "browse:suspenso" }
+    { id: "accion", title: "Acción", ref: "browse:genero:accion" },
+    { id: "ciencia-ficcion", title: "Ciencia Ficción", ref: "browse:genero:ciencia-ficcion" },
+    { id: "comedia", title: "Comedia", ref: "browse:genero:comedia" },
+    { id: "terror", title: "Terror", ref: "browse:genero:terror" },
+    { id: "drama", title: "Drama", ref: "browse:genero:drama" },
+    { id: "animacion", title: "Animación", ref: "browse:genero:animacion" },
+    { id: "aventura", title: "Aventura", ref: "browse:genero:aventura" },
+    { id: "suspenso", title: "Suspenso", ref: "browse:genero:suspenso" }
   ];
 }
 
-//  INTERFAZ DE PESTAÑAS 
+// --- SISTEMA DE PESTAÑAS (LIMPIAS Y DIRECTAS AL CATÁLOGO) ---
 export async function section({ tab }) {
   const tabs = [
     { id: "peliculas", label: "Películas" },
@@ -132,7 +130,7 @@ export async function section({ tab }) {
 
   const fetchPage = async (path) => {
     try {
-      const res = await kino.fetch(`https://pelispop.mov${path}`);
+      const res = await kino.fetch(`https://pelispop.mov${path}`, { headers: { "User-Agent": "Mozilla/5.0" } });
       if (!res.ok) return "";
       return await res.text();
     } catch (e) { return ""; }
@@ -141,57 +139,44 @@ export async function section({ tab }) {
   let heroItem = null;
   const rows = [];
 
+  // Pestaña 1: Solo Películas
   if (chosen === "peliculas") {
-    // Cargamos inicio, películas y un par de géneros
-    const [htmlHome, htmlPelis, htmlAccion, htmlTerror] = await Promise.all([
+    const [htmlHome, htmlPelis] = await Promise.all([
       fetchPage("/"),
-      fetchPage("/peliculas"),
-      fetchPage("/genero/accion"),
-      fetchPage("/genero/terror")
+      fetchPage("/peliculas")
     ]);
 
     const ultimas = extractItems(htmlHome).filter(i => i.kind === 'movie');
     const peliculas = extractItems(htmlPelis);
-    const accion = extractItems(htmlAccion);
-    const terror = extractItems(htmlTerror);
 
     if (ultimas.length > 0) heroItem = ultimas[0];
 
     if (ultimas.length > 0) rows.push({ id: "estrenos", title: "Estrenos Destacados", ref: "browse:peliculas", items: ultimas.slice(0, 20) });
     if (peliculas.length > 0) rows.push({ id: "catalogo", title: "Catálogo de Películas", ref: "browse:peliculas", items: peliculas.slice(0, 20) });
-    if (accion.length > 0) rows.push({ id: "accion", title: "Acción", ref: "browse:genero:accion", items: accion.slice(0, 20) });
-    if (terror.length > 0) rows.push({ id: "terror", title: "Terror", ref: "browse:genero:terror", items: terror.slice(0, 20) });
 
+  // Pestaña 2: Solo Series
   } else if (chosen === "series") {
-    const [htmlSeries, htmlAccion, htmlDrama] = await Promise.all([
-      fetchPage("/series"),
-      fetchPage("/genero/accion"),
-      fetchPage("/genero/drama")
-    ]);
-
+    const htmlSeries = await fetchPage("/series");
     const series = extractItems(htmlSeries);
-    const accion = extractItems(htmlAccion).filter(i => i.kind === 'series');
-    const drama = extractItems(htmlDrama).filter(i => i.kind === 'series');
 
     if (series.length > 0) heroItem = series[0];
+    if (series.length > 0) rows.push({ id: "series-recientes", title: "Catálogo de Series", ref: "browse:series", items: series.slice(0, 20) });
 
-    if (series.length > 0) rows.push({ id: "series-recientes", title: "Capítulos Recientes", ref: "browse:series", items: series.slice(0, 20) });
-    if (accion.length > 0) rows.push({ id: "s-accion", title: "Acción", ref: "browse:genero:accion", items: accion.slice(0, 20) });
-    if (drama.length > 0) rows.push({ id: "s-drama", title: "Drama", ref: "browse:genero:drama", items: drama.slice(0, 20) });
-
+  // Pestaña 3: Solo Anime
   } else if (chosen === "anime") {
     const htmlAnime = await fetchPage("/generos/anime");
     const animeList = extractItems(htmlAnime);
     
     if (animeList.length > 0) heroItem = animeList[0];
-    if (animeList.length > 0) rows.push({ id: "anime", title: "Anime Reciente", ref: "browse:generos:anime", items: animeList.slice(0, 20) });
+    if (animeList.length > 0) rows.push({ id: "anime", title: "Catálogo de Anime", ref: "browse:generos:anime", items: animeList.slice(0, 20) });
 
+  // Pestaña 4: Solo Doramas
   } else if (chosen === "doramas") {
     const htmlDoramas = await fetchPage("/generos/dorama");
     const doramasList = extractItems(htmlDoramas);
     
     if (doramasList.length > 0) heroItem = doramasList[0];
-    if (doramasList.length > 0) rows.push({ id: "doramas", title: "Doramas en Emisión", ref: "browse:generos:dorama", items: doramasList.slice(0, 20) });
+    if (doramasList.length > 0) rows.push({ id: "doramas", title: "Catálogo de Doramas", ref: "browse:generos:dorama", items: doramasList.slice(0, 20) });
   }
 
   let hero = { title: "PelisPop", text: "Explora el mejor contenido." };
@@ -206,32 +191,36 @@ export async function section({ tab }) {
   return { tabs, tab: chosen, hero, rows };
 }
 
-// --- BROWSE ACTUALIZADO PARA LAS PESTAÑAS ---
+// --- PAGINACIÓN CORREGIDA (PARA QUE FUNCIONE EL "VER MÁS") ---
 export async function browse(ref, cursor) {
   const page = parseInt(cursor, 10) || 1;
   let url = "";
 
+  // TRUCO: Si es la página 1, NO agregamos "/page/1" para evitar el error 404 de Pelispop.
+  const pagePath = page > 1 ? `page/${page}/` : "";
+
   if (ref === "browse:peliculas") {
-    url = `https://pelispop.mov/peliculas/page/${page}`;
+    url = `https://pelispop.mov/peliculas/${pagePath}`;
   } else if (ref === "browse:series") {
-    url = `https://pelispop.mov/series/page/${page}`;
+    url = `https://pelispop.mov/series/${pagePath}`;
   } else if (ref.startsWith("browse:genero:")) {
     const genre = ref.split(":")[2];
-    url = `https://pelispop.mov/genero/${genre}/page/${page}`;
-  } else if (ref.startsWith("browse:generos:")) { // Especial para doramas/anime
+    url = `https://pelispop.mov/genero/${genre}/${pagePath}`;
+  } else if (ref.startsWith("browse:generos:")) { 
     const genre = ref.split(":")[2];
-    url = `https://pelispop.mov/generos/${genre}/page/${page}`;
+    url = `https://pelispop.mov/generos/${genre}/${pagePath}`;
   }
 
   if (!url) return { items: [] };
 
-  const r = await kino.fetch(url);
+  const r = await kino.fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
   if (!r.ok) return { items: [] };
   
   const items = extractItems(await r.text());
 
   return {
     items: items,
+    // Activamos el scroll infinito
     next: items.length > 0 ? String(page + 1) : null 
   };
 }
