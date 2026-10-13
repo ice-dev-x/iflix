@@ -1,7 +1,7 @@
 {
   "id": "iflix",
   "name": "iFlix",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "apiVersion": 6,
   "browser": true,
   "entry": "plugin.js",
@@ -44,8 +44,7 @@
     "browse",
     "episodes",
     "resolve",
-    "download",
-    "section"
+    "download"
   ],
   "categories": [
     "movies",
