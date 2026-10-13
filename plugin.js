@@ -9,7 +9,7 @@ function cleanText(text) {
     .trim();
 }
 
-// --- EXTRACCIÓN CON TÍTULOS LIMPIOS ---
+// --- EXTRACCIÓN CON SOPORTE PARA VISTA DE TARJETAS ---
 function extractItems(html) {
   const results = [];
   const articleRegex = /<article\s+class="post[^>]*>([\s\S]*?)<\/article>/gi;
@@ -22,22 +22,17 @@ function extractItems(html) {
     let link = linkMatch[1];
     if (!link.startsWith("http")) link = `https://pelispop.mov${link}`;
 
-    const isSerie = link.includes('/serie/') || link.includes('/anime/');
-    const idMatch = link.match(/\/(serie|pelicula|anime)\/([^/]+)/);
+    const isSerie = link.includes('/serie/') || link.includes('/anime/') || link.includes('/animes/');
+    const idMatch = link.match(/\/(serie|pelicula|anime|animes)\/([^/]+)/);
     const id = idMatch ? idMatch[2] : link.replace(/[^a-zA-Z0-9-]/g, '');
 
     const imgMatch = block.match(/src="([^"]+)"/) || block.match(/data-src="([^"]+)"/);
     const titleMatch = block.match(/alt="([^"]+)"/) || block.match(/<h[23][^>]*>([\s\S]*?)<\/h[23]>/);
     
-    // LIMPIEZA DE TÍTULO: Quitamos "Ver", "online", "en HD", "latino", etc.
     let title = titleMatch ? titleMatch[1] : id;
-    title = cleanText(title)
-      .replace(/^Ver\s+/i, '')
-      .replace(/\s+(online|latino|subtitulado|castellano|en hd).*$/i, '')
-      .trim();
+    title = cleanText(title).replace(/^Ver\s+/i, '').replace(/\s+(online|latino|subtitulado|castellano|en hd).*$/i, '').trim();
 
     const yearMatch = block.match(/>(\d{4})</);
-    
     let poster = imgMatch ? (imgMatch[1] || imgMatch[2]) : null;
     if (poster && poster.startsWith("//")) poster = "https:" + poster;
 
@@ -47,6 +42,7 @@ function extractItems(html) {
       title: title,
       kind: isSerie ? 'series' : 'movie',
       poster: poster,
+      backdrop: poster, // <- ESTA ES LA LÍNEA MÁGICA: Engaña a Kino para habilitar las tarjetas
       year: yearMatch ? yearMatch[1] : null
     });
   }
