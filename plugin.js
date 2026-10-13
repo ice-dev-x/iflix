@@ -1,5 +1,6 @@
 // --- FUNCIÓN AUXILIAR DE EXTRACCIÓN ---
 // Recorta los cuadros de películas de cualquier código HTML de Pelispop
+// --- EXTRACCIÓN CORREGIDA (Ruta individual /anime/ en singular) ---
 function extractItems(html) {
   const results = [];
   const articleRegex = /<article\s+class="post[^>]*>([\s\S]*?)<\/article>/gi;
@@ -9,24 +10,31 @@ function extractItems(html) {
     const block = match[1];
     const linkMatch = block.match(/href="([^"]+)"/);
     if (!linkMatch) continue; 
-    const link = linkMatch[1];
+    let link = linkMatch[1];
+    if (!link.startsWith("http")) link = `https://pelispop.mov${link}`;
 
-    const isSerie = link.includes('/serie/');
-    const idMatch = link.match(/\/(serie|pelicula)\/([^/]+)/);
+    // SOLUCIÓN: Detectamos explícitamente /serie/ y /anime/ (singular)
+    const isSerie = link.includes('/serie/') || link.includes('/anime/');
+    
+    // Ajustamos la expresión regular para atrapar el ID correctamente
+    const idMatch = link.match(/\/(serie|pelicula|anime)\/([^/]+)/);
     const id = idMatch ? idMatch[2] : link.replace(/[^a-zA-Z0-9-]/g, '');
 
-    const imgMatch = block.match(/src="([^"]+)"/);
+    const imgMatch = block.match(/src="([^"]+)"/) || block.match(/data-src="([^"]+)"/);
     const titleMatch = block.match(/alt="([^"]+)"/) || block.match(/<h[23][^>]*>([\s\S]*?)<\/h[23]>/);
     let title = titleMatch ? titleMatch[1].replace(/<[^>]*>/g, '').trim() : id;
 
     const yearMatch = block.match(/>(\d{4})</);
+    
+    let poster = imgMatch ? (imgMatch[1] || imgMatch[2]) : null;
+    if (poster && poster.startsWith("//")) poster = "https:" + poster;
 
     results.push({
       id: id,
       ref: link,
       title: title,
-      kind: isSerie ? 'series' : 'movie',
-      poster: imgMatch ? imgMatch[1] : null,
+      kind: isSerie ? 'series' : 'movie', // Ahora los animes son reconocidos como series
+      poster: poster,
       year: yearMatch ? yearMatch[1] : null
     });
   }
@@ -42,62 +50,42 @@ export async function search(query) {
   return extractItems(await r.text());
 }
 
-// --- PANTALLA PRINCIPAL (INICIO LIMPIO Y MINIMALISTA) ---
+// --- PANTALLA PRINCIPAL GLOBAL DE KINO (HOME ACTUALIZADO) ---
 export async function home() {
-  const urls = [
-    "https://pelispop.mov/",
-    "https://pelispop.mov/series"
-  ];
+  const fetchPage = async (path) => {
+    try {
+      const res = await kino.fetch(`https://pelispop.mov${path}`, { headers: { "User-Agent": "Mozilla/5.0" } });
+      return res.ok ? await res.text() : "";
+    } catch (e) { return ""; }
+  };
 
-  const responses = await Promise.all(
-    urls.map(url => kino.fetch(url).catch(() => null))
-  );
+  // Cargamos lo mejor de cada categoría para el Home
+  const [htmlHome, htmlPelisPopulares, htmlSeriesPopulares, htmlAnimePopulares] = await Promise.all([
+    fetchPage("/"),
+    fetchPage("/peliculas/populares"),
+    fetchPage("/series/populares"),
+    fetchPage("/animes/populares")
+  ]);
+
+  const estrenos = extractItems(htmlHome).filter(i => i.kind === 'movie');
+  const pelisPopulares = extractItems(htmlPelisPopulares);
+  const seriesPopulares = extractItems(htmlSeriesPopulares);
+  const animePopulares = extractItems(htmlAnimePopulares);
 
   const rows = [];
 
-  // 1. Últimas películas
-  if (responses[0] && responses[0].ok) {
-    const html = await responses[0].text();
-    const items = extractItems(html).filter(i => i.kind === 'movie');
-    if (items.length > 0) {
-      rows.push({
-        id: "ultimas-peliculas",
-        title: "Peliculas recientes",
-        ref: "browse:peliculas",
-        genre: "peliculas",
-        items: items.slice(0, 20)
-      });
-    }
+  // Usamos las rutas exactas en "ref" para que el botón "Ver más" funcione perfectamente
+  if (estrenos.length > 0) {
+    rows.push({ id: "h-estrenos", title: "Estrenos Destacados", ref: "/", items: estrenos.slice(0, 20) });
   }
-
-  // 2. Capítulos recientes de series
-  if (responses[1] && responses[1].ok) {
-    const html = await responses[1].text();
-    const items = extractItems(html).filter(i => i.kind === 'series');
-    if (items.length > 0) {
-      rows.push({
-        id: "capitulos-recientes",
-        title: "Capitulos recientes",
-        ref: "browse:series",
-        genre: "series",
-        items: items.slice(0, 20)
-      });
-    }
+  if (pelisPopulares.length > 0) {
+    rows.push({ id: "h-pelis-pop", title: "Películas Populares", ref: "/peliculas/populares", items: pelisPopulares.slice(0, 20) });
   }
-
-  // 3. Destacados (combinados de la página principal)
-  if (responses[0] && responses[0].ok) {
-    const html = await responses[0].text();
-    const items = extractItems(html);
-    if (items.length > 0) {
-      rows.push({
-        id: "destacados",
-        title: "Destacados",
-        ref: "browse:novedades",
-        genre: "peliculas",
-        items: items.slice(0, 20)
-      });
-    }
+  if (seriesPopulares.length > 0) {
+    rows.push({ id: "h-series-pop", title: "Series Populares", ref: "/series/populares", items: seriesPopulares.slice(0, 20) });
+  }
+  if (animePopulares.length > 0) {
+    rows.push({ id: "h-anime-pop", title: "Animes Populares", ref: "/animes/populares", items: animePopulares.slice(0, 20) });
   }
 
   return rows;
