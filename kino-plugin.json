@@ -1,14 +1,14 @@
 {
   "id": "iflix",
   "name": "iFlix",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "apiVersion": 6,
   "browser": true,
   "entry": "plugin.js",
   "section": { "label": "iFLIX" },
   "icon": "icon.png",
   "author": "sadmachine",
-  "description": "Películas y series en español latino, castellano y subtitulado.",
+  "description": "Películas, series, animes y doramas",
    "color": "#0d1b2a",
   "theme": {
     "accent": "#38bdf8",
