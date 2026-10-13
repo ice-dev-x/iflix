@@ -127,8 +127,8 @@ export async function categories() {
   ];
 }
 
-// --- SISTEMA DE PESTAÑAS (CORRECCIÓN RUTA ANIMES) ---
-export async function section({ tab }) {
+// --- SISTEMA DE PESTAÑAS (INCLUYENDO "POPULARES" EN TODAS) ---
+export async function section({ tab } = {}) {
   const tabs = [
     { id: "peliculas", label: "Películas" },
     { id: "series", label: "Series" },
@@ -138,59 +138,71 @@ export async function section({ tab }) {
   ];
 
   const chosen = tabs.some((t) => t.id === tab) ? tab : "peliculas";
+  const rows = [];
+  let heroItem = null;
 
   const fetchPage = async (path) => {
     try {
       const res = await kino.fetch(`https://pelispop.mov${path}`, { headers: { "User-Agent": "Mozilla/5.0" } });
-      if (!res.ok) return "";
-      return await res.text();
+      return res.ok ? await res.text() : "";
     } catch (e) { return ""; }
   };
 
-  let heroItem = null;
-  const rows = [];
-
-  // Pestaña 1: Películas
   if (chosen === "peliculas") {
-    const htmlHome = await fetchPage("/");
-    const htmlPelis = await fetchPage("/peliculas");
+    // Agregamos Populares en paralelo
+    const [htmlHome, htmlPopulares, htmlPelis] = await Promise.all([
+      fetchPage("/"), fetchPage("/peliculas/populares"), fetchPage("/peliculas")
+    ]);
 
     const ultimas = extractItems(htmlHome).filter(i => i.kind === 'movie');
+    const populares = extractItems(htmlPopulares);
     const peliculas = extractItems(htmlPelis);
 
     if (ultimas.length > 0) heroItem = ultimas[0];
-    if (ultimas.length > 0) rows.push({ id: "estrenos", title: "Estrenos Destacados", ref: "browse:peliculas", items: ultimas.slice(0, 20) });
-    if (peliculas.length > 0) rows.push({ id: "catalogo", title: "Catálogo de Películas", ref: "browse:peliculas", items: peliculas.slice(0, 20) });
+    else if (populares.length > 0) heroItem = populares[0];
 
-  // Pestaña 2: Series
+    // Ahora el "ref" es directamente la ruta de la web
+    if (ultimas.length > 0) rows.push({ id: "estrenos", title: "Estrenos Destacados", ref: "/", items: ultimas.slice(0, 20) });
+    if (populares.length > 0) rows.push({ id: "populares", title: "Películas Populares", ref: "/peliculas/populares", items: populares.slice(0, 20) });
+    if (peliculas.length > 0) rows.push({ id: "catalogo", title: "Catálogo de Películas", ref: "/peliculas", items: peliculas.slice(0, 20) });
+
   } else if (chosen === "series") {
-    const htmlHome = await fetchPage("/");
-    const htmlSeries = await fetchPage("/series");
+    const [htmlHome, htmlPopulares, htmlSeries] = await Promise.all([
+      fetchPage("/"), fetchPage("/series/populares"), fetchPage("/series")
+    ]);
 
     const recientes = extractItems(htmlHome).filter(i => i.kind === 'series');
+    const populares = extractItems(htmlPopulares);
     const series = extractItems(htmlSeries);
 
     if (recientes.length > 0) heroItem = recientes[0];
-    if (recientes.length > 0) rows.push({ id: "series-recientes", title: "Capítulos Recientes", ref: "browse:series", items: recientes.slice(0, 20) });
-    if (series.length > 0) rows.push({ id: "catalogo-series", title: "Catálogo de Series", ref: "browse:series", items: series.slice(0, 20) });
+    else if (populares.length > 0) heroItem = populares[0];
 
-  // Pestaña 3: Anime (Ruta corregida a /animes)
+    if (recientes.length > 0) rows.push({ id: "series-recientes", title: "Capítulos Recientes", ref: "/", items: recientes.slice(0, 20) });
+    if (populares.length > 0) rows.push({ id: "series-populares", title: "Series Populares", ref: "/series/populares", items: populares.slice(0, 20) });
+    if (series.length > 0) rows.push({ id: "catalogo-series", title: "Catálogo de Series", ref: "/series", items: series.slice(0, 20) });
+
   } else if (chosen === "anime") {
-    const htmlAnime = await fetchPage("/animes");
+    const [htmlPopulares, htmlAnime] = await Promise.all([
+      fetchPage("/animes/populares"), fetchPage("/animes")
+    ]);
+
+    const populares = extractItems(htmlPopulares);
     const animeList = extractItems(htmlAnime);
     
-    if (animeList.length > 0) heroItem = animeList[0];
-    if (animeList.length > 0) rows.push({ id: "anime", title: "Catálogo de Anime", ref: "browse:animes", items: animeList.slice(0, 20) });
+    if (populares.length > 0) heroItem = populares[0];
+    else if (animeList.length > 0) heroItem = animeList[0];
 
-  // Pestaña 4: Doramas
+    if (populares.length > 0) rows.push({ id: "anime-populares", title: "Animes Populares", ref: "/animes/populares", items: populares.slice(0, 20) });
+    if (animeList.length > 0) rows.push({ id: "anime", title: "Catálogo de Anime", ref: "/animes", items: animeList.slice(0, 20) });
+
   } else if (chosen === "doramas") {
     const htmlDoramas = await fetchPage("/generos/dorama");
     const doramasList = extractItems(htmlDoramas);
     
     if (doramasList.length > 0) heroItem = doramasList[0];
-    if (doramasList.length > 0) rows.push({ id: "doramas", title: "Catálogo de Doramas", ref: "browse:generos:dorama", items: doramasList.slice(0, 20) });
+    if (doramasList.length > 0) rows.push({ id: "doramas", title: "Catálogo de Doramas", ref: "/generos/dorama", items: doramasList.slice(0, 20) });
   
-  // Pestaña 5: Géneros
   } else if (chosen === "generos") {
     const genrePaths = [
       { id: "accion", title: "Acción", path: "/generos/accion" },
@@ -206,57 +218,45 @@ export async function section({ tab }) {
       const items = extractItems(html);
       if (items.length > 0) {
         if (!heroItem) heroItem = items[0];
-        rows.push({ id: g.id, title: g.title, ref: `browse:genero:${g.id}`, items: items.slice(0, 20) });
+        rows.push({ id: g.id, title: g.title, ref: g.path, items: items.slice(0, 20) });
       }
     }
   }
 
   let hero = { title: "PelisPop", text: "Explora el mejor contenido." };
   if (heroItem) {
-    hero = {
-      title: heroItem.title,
-      text: "Disfruta de este contenido destacado.",
-      image: heroItem.poster
-    };
+    hero = { title: heroItem.title, text: "Disfruta de este contenido destacado.", image: heroItem.poster };
   }
 
   return { tabs, tab: chosen, hero, rows };
 }
-
-// --- BROWSE (CORRECCIÓN RUTAS PAGINACIÓN) ---
+// --- BROWSE (PAGINACIÓN EXACTA Y SCROLL INFINITO) ---
 export async function browse(ref, cursor) {
   const page = parseInt(cursor, 10) || 1;
-  let url = "";
+  
+  if (!ref) return { items: [] };
 
-  if (ref === "browse:peliculas") {
-    url = "https://pelispop.mov/peliculas";
-  } else if (ref === "browse:series") {
-    url = "https://pelispop.mov/series";
-  } else if (ref === "browse:animes") {  // <- Agregado para el Ver más de Animes
-    url = "https://pelispop.mov/animes";
-  } else if (ref.startsWith("browse:genero:")) {
-    const genre = ref.split(":")[2];
-    url = `https://pelispop.mov/generos/${genre}`;
-  } else if (ref.startsWith("browse:generos:")) { // Para doramas
-    const genre = ref.split(":")[2];
-    url = `https://pelispop.mov/generos/${genre}`;
-  }
+  let url = `https://pelispop.mov${ref}`;
 
-  // Añadimos la página sin la barra diagonal al final
+  // Usamos la estructura de Cuevana que descubriste (?page=2)
   if (page > 1) {
-    url += `/page/${page}`;
+    url += url.includes("?") ? `&page=${page}` : `?page=${page}`;
   }
-
-  if (!url) return { items: [] };
 
   const r = await kino.fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
   if (!r.ok) return { items: [] };
   
   const items = extractItems(await r.text());
 
+  // Bloqueamos la paginación solo para la fila de inicio
+  if (ref === "/" && page === 1) {
+    return { items, next: null };
+  }
+
   return {
     items: items,
-    next: items.length > 0 ? String(page + 1) : null 
+    // Mientras la página devuelva resultados, Kino seguirá activando el scroll al bajar
+    next: items.length >= 10 ? String(page + 1) : null 
   };
 }
 // --- LISTA DE CAPÍTULOS (SOLO PARA SERIES) ---
