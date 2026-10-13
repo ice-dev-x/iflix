@@ -103,17 +103,27 @@ export async function home() {
   return rows;
 }
 
-// --- PESTAÑA NATIVA DE CATEGORÍAS (LA CUADRÍCULA DE GÉNEROS MEZCLADOS) ---
+// --- PESTAÑA NATIVA DE CATEGORÍAS (LISTA COMPLETA DE GÉNEROS) ---
 export async function categories() {
   return [
     { id: "accion", title: "Acción", ref: "browse:genero:accion" },
-    { id: "ciencia-ficcion", title: "Ciencia Ficción", ref: "browse:genero:ciencia-ficcion" },
-    { id: "comedia", title: "Comedia", ref: "browse:genero:comedia" },
-    { id: "terror", title: "Terror", ref: "browse:genero:terror" },
-    { id: "drama", title: "Drama", ref: "browse:genero:drama" },
     { id: "animacion", title: "Animación", ref: "browse:genero:animacion" },
     { id: "aventura", title: "Aventura", ref: "browse:genero:aventura" },
-    { id: "suspenso", title: "Suspenso", ref: "browse:genero:suspenso" }
+    { id: "belica", title: "Bélica", ref: "browse:genero:belica" },
+    { id: "ciencia-ficcion", title: "Ciencia Ficción", ref: "browse:genero:ciencia-ficcion" },
+    { id: "comedia", title: "Comedia", ref: "browse:genero:comedia" },
+    { id: "crimen", title: "Crimen", ref: "browse:genero:crimen" },
+    { id: "documental", title: "Documental", ref: "browse:genero:documental" },
+    { id: "drama", title: "Drama", ref: "browse:genero:drama" },
+    { id: "fantasia", title: "Fantasía", ref: "browse:genero:fantasia" },
+    { id: "familia", title: "Familia", ref: "browse:genero:familia" },
+    { id: "guerra", title: "Guerra", ref: "browse:genero:guerra" },
+    { id: "historia", title: "Historia", ref: "browse:genero:historia" },
+    { id: "romance", title: "Romance", ref: "browse:genero:romance" },
+    { id: "suspense", title: "Suspense", ref: "browse:genero:suspense" },
+    { id: "terror", title: "Terror", ref: "browse:genero:terror" },
+    { id: "western", title: "Western", ref: "browse:genero:western" },
+    { id: "misterio", title: "Misterio", ref: "browse:genero:misterio" }
   ];
 }
 
