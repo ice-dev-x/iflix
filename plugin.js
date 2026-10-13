@@ -1,6 +1,15 @@
 // --- FUNCIÓN AUXILIAR DE EXTRACCIÓN ---
 // Recorta los cuadros de películas de cualquier código HTML de Pelispop
-// --- EXTRACCIÓN CORREGIDA (Ruta individual /anime/ en singular) ---
+// --- FUNCIÓN AUXILIAR PARA LIMPIAR TEXTO ---
+function cleanText(text) {
+  if (!text) return "";
+  return text
+    .replace(/&amp;/g, "&").replace(/&#039;/g, "'").replace(/&quot;/g, '"')
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/<[^>]*>/g, "")
+    .trim();
+}
+
+// --- EXTRACCIÓN CON TÍTULOS LIMPIOS ---
 function extractItems(html) {
   const results = [];
   const articleRegex = /<article\s+class="post[^>]*>([\s\S]*?)<\/article>/gi;
@@ -13,16 +22,19 @@ function extractItems(html) {
     let link = linkMatch[1];
     if (!link.startsWith("http")) link = `https://pelispop.mov${link}`;
 
-    // SOLUCIÓN: Detectamos explícitamente /serie/ y /anime/ (singular)
     const isSerie = link.includes('/serie/') || link.includes('/anime/');
-    
-    // Ajustamos la expresión regular para atrapar el ID correctamente
     const idMatch = link.match(/\/(serie|pelicula|anime)\/([^/]+)/);
     const id = idMatch ? idMatch[2] : link.replace(/[^a-zA-Z0-9-]/g, '');
 
     const imgMatch = block.match(/src="([^"]+)"/) || block.match(/data-src="([^"]+)"/);
     const titleMatch = block.match(/alt="([^"]+)"/) || block.match(/<h[23][^>]*>([\s\S]*?)<\/h[23]>/);
-    let title = titleMatch ? titleMatch[1].replace(/<[^>]*>/g, '').trim() : id;
+    
+    // LIMPIEZA DE TÍTULO: Quitamos "Ver", "online", "en HD", "latino", etc.
+    let title = titleMatch ? titleMatch[1] : id;
+    title = cleanText(title)
+      .replace(/^Ver\s+/i, '')
+      .replace(/\s+(online|latino|subtitulado|castellano|en hd).*$/i, '')
+      .trim();
 
     const yearMatch = block.match(/>(\d{4})</);
     
@@ -33,7 +45,7 @@ function extractItems(html) {
       id: id,
       ref: link,
       title: title,
-      kind: isSerie ? 'series' : 'movie', // Ahora los animes son reconocidos como series
+      kind: isSerie ? 'series' : 'movie',
       poster: poster,
       year: yearMatch ? yearMatch[1] : null
     });
@@ -198,7 +210,8 @@ export async function section({ tab } = {}) {
       { id: "terror", title: "Terror", path: "/generos/terror" },
       { id: "ciencia-ficcion", title: "Ciencia Ficción", path: "/generos/ciencia-ficcion" },
       { id: "drama", title: "Drama", path: "/generos/drama" },
-      { id: "animacion", title: "Animación", path: "/generos/animacion" }
+      { id: "animacion", title: "Animación", path: "/generos/animacion" },
+      { id: "western", title: "Western", path: "browse:genero:western" },
     ];
 
     for (const g of genrePaths) {
@@ -249,49 +262,90 @@ export async function browse(ref, cursor) {
 }
 // --- LISTA DE CAPÍTULOS (SOLO PARA SERIES) ---
 export async function episodes(ref) {
-  // Truco: Si el ref viene de la página de inicio y apunta a un capítulo específico,
-  // lo cortamos para obtener la URL principal de la serie.
-  const seriesUrl = ref.split('/temporada/')[0];
+  // Obtenemos la URL principal si el enlace apunta a un capítulo
+  const mainUrl = ref.includes('/temporada/') ? ref.split('/temporada/')[0] : ref;
 
-  const r = await kino.fetch(seriesUrl);
-  if (!r.ok) throw new Error(`unavailable: Error al cargar la serie: ${r.status}`);
+  const r = await kino.fetch(mainUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
+  if (!r.ok) throw new Error("No se pudo cargar la información");
   const html = await r.text();
 
-  const episodesList = [];
-  const seen = new Set(); // Para evitar capítulos duplicados
+  const metadata = {};
 
-  // Buscamos enlaces que tengan el formato exacto de los capítulos en Pelispop
-  // Ejemplo: href="https://pelispop.mov/serie/batman/temporada/1/capitulo/5"
-  const epRegex = /href="([^"]+\/temporada\/(\d+)\/capitulo\/(\d+)[^"]*)"/gi;
-  let match;
+  // 1. Sinopsis
+  const descMatch = html.match(/<div[^>]*class="[^"]*description[^"]*"[^>]*>([\s\S]*?)<\/div>/i) || html.match(/<p[^>]*>\s*([^<]{40,})\s*<\/p>/i);
+  if (descMatch) metadata.overview = cleanText(descMatch[1]);
 
-  while ((match = epRegex.exec(html)) !== null) {
-    let epUrl = match[1];
-    const season = parseInt(match[2], 10);
-    const episode = parseInt(match[3], 10);
-    
-    // Si el enlace es relativo, le agregamos el dominio base
-    if (epUrl.startsWith('/')) {
-      epUrl = "https://pelispop.mov" + epUrl;
-    }
+  // 2. Calificación (TMDB)
+  const voteMatch = html.match(/TMDB\s*<\/span>\s*([\d.]+)/i) || html.match(/class="[^"]*rating[^"]*"[^>]*>([\d.]+)/i) || html.match(/<span[^>]*class="Num"[^>]*>([\d.]+)<\/span>/i);
+  if (voteMatch) metadata.rating = parseFloat(voteMatch[1]);
 
-    const key = `${season}x${episode}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      episodesList.push({
-        season: season,
-        number: episode,
-        ref: epUrl 
-      });
+  // 3. Géneros
+  const genres = [];
+  const gRegex = /<a[^>]+href="[^"]*generos?\/[^"]*"[^>]*>\s*([^<]+)\s*<\/a>/gi;
+  let gm;
+  while ((gm = gRegex.exec(html)) !== null) {
+    genres.push(cleanText(gm[1]));
+  }
+  if (genres.length > 0) metadata.genres = [...new Set(genres)];
+
+  // 4. Año
+  const yearMatch = html.match(/class="Date"[^>]*>\s*(\d{4})\s*</i) || html.match(/>(19\d{2}|20\d{2})<\/(?:span|p|a)>/i);
+  if (yearMatch) metadata.year = parseInt(yearMatch[1], 10);
+
+  // 5. TMDB ID (Para que Kino auto-complete el resto de información si falta algo)
+  const tmdbIdMatch = html.match(/tmdb[=&_]*(\d{3,})/i) || html.match(/data-id="(\d{3,})"/i) || html.match(/"tmdb_id"\s*:\s*"?(\d+)"?/i);
+  if (tmdbIdMatch) metadata.ids = { tmdb: parseInt(tmdbIdMatch[1], 10) };
+
+  // 6. Fondo / Backdrop
+  const bgMatch = html.match(/<meta\s+(?:property|name)="og:image"\s+content="([^"]+)"/i) || html.match(/background-image:\s*url\((['"]?)([^)'"d]+)\1\)/i);
+  if (bgMatch) {
+    let bUrl = bgMatch[1] || bgMatch[2];
+    if (bUrl && !bUrl.startsWith('data:')) {
+      metadata.backdrop = bUrl.startsWith('//') ? 'https:' + bUrl : bUrl;
     }
   }
 
-  // Ordenamos la lista por temporada y luego por número de capítulo
-  episodesList.sort((a, b) => a.season - b.season || a.number - b.number);
+  const episodesList = [];
 
-  return {
-    episodes: episodesList
-  };
+  // Extracción de capítulos para Series y Animes
+  if (mainUrl.includes('/serie/') || mainUrl.includes('/anime/')) {
+    const seen = new Set();
+    const epRegex = /href="([^"]+\/temporada\/(\d+)\/capitulo\/(\d+)[^"]*)"/gi;
+    let match;
+
+    while ((match = epRegex.exec(html)) !== null) {
+      let epUrl = match[1];
+      const season = parseInt(match[2], 10);
+      const episode = parseInt(match[3], 10);
+      
+      if (epUrl.startsWith('/')) epUrl = "https://pelispop.mov" + epUrl;
+
+      const key = `${season}x${episode}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        episodesList.push({
+          season: season,
+          number: episode,
+          ref: epUrl 
+        });
+      }
+    }
+    episodesList.sort((a, b) => a.season - b.season || a.number - b.number);
+  }
+
+  // Si no hay episodios, devolvemos un único botón para la película
+  if (episodesList.length === 0) {
+    episodesList.push({ season: 1, number: 1, ref: mainUrl, title: "Reproducir" });
+  }
+
+  const result = { episodes: episodesList };
+  
+  // Inyectamos la metadata para que Kino la dibuje en la interfaz
+  if (Object.keys(metadata).length > 0) {
+    result.series = metadata; 
+  }
+
+  return result;
 }
 export async function resolve(ref) {
   // Función interna para aplicar el mismo filtro a todos los servidores
