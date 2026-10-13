@@ -1,7 +1,7 @@
 {
   "id": "iflix",
   "name": "iFlix",
-  "version": "1.1.7",
+  "version": "1.1.8",
   "apiVersion": 6,
   "browser": true,
   "entry": "plugin.js",
@@ -11,7 +11,7 @@
   "description": "Películas, series, animes y doramas",
    "color": "#0d1b2a",
   "theme": {
-    "accent": "#38bdf8",
+    "accent": "#e9f5ed",
     "onAccent": "#0f172a",
     "background": "#0b131d",
     "surface": "#131f30",
