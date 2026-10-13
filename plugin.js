@@ -127,13 +127,14 @@ export async function categories() {
   ];
 }
 
-// --- SISTEMA DE PESTAÑAS (LIMPIAS Y DIRECTAS AL CATÁLOGO) ---
+// --- SISTEMA DE PESTAÑAS (CORRECCIÓN RUTA ANIMES) ---
 export async function section({ tab }) {
   const tabs = [
     { id: "peliculas", label: "Películas" },
     { id: "series", label: "Series" },
     { id: "anime", label: "Anime" },
-    { id: "doramas", label: "Doramas" }
+    { id: "doramas", label: "Doramas" },
+    { id: "generos", label: "Géneros" } 
   ];
 
   const chosen = tabs.some((t) => t.id === tab) ? tab : "peliculas";
@@ -149,51 +150,72 @@ export async function section({ tab }) {
   let heroItem = null;
   const rows = [];
 
-  // Pestaña 1: Solo Películas
+  // Pestaña 1: Películas
   if (chosen === "peliculas") {
-    const [htmlHome, htmlPelis] = await Promise.all([
-      fetchPage("/"),
-      fetchPage("/peliculas")
-    ]);
+    const htmlHome = await fetchPage("/");
+    const htmlPelis = await fetchPage("/peliculas");
 
     const ultimas = extractItems(htmlHome).filter(i => i.kind === 'movie');
     const peliculas = extractItems(htmlPelis);
 
     if (ultimas.length > 0) heroItem = ultimas[0];
-
     if (ultimas.length > 0) rows.push({ id: "estrenos", title: "Estrenos Destacados", ref: "browse:peliculas", items: ultimas.slice(0, 20) });
     if (peliculas.length > 0) rows.push({ id: "catalogo", title: "Catálogo de Películas", ref: "browse:peliculas", items: peliculas.slice(0, 20) });
 
-  // Pestaña 2: Solo Series
+  // Pestaña 2: Series
   } else if (chosen === "series") {
+    const htmlHome = await fetchPage("/");
     const htmlSeries = await fetchPage("/series");
+
+    const recientes = extractItems(htmlHome).filter(i => i.kind === 'series');
     const series = extractItems(htmlSeries);
 
-    if (series.length > 0) heroItem = series[0];
-    if (series.length > 0) rows.push({ id: "series-recientes", title: "Catálogo de Series", ref: "browse:series", items: series.slice(0, 20) });
+    if (recientes.length > 0) heroItem = recientes[0];
+    if (recientes.length > 0) rows.push({ id: "series-recientes", title: "Capítulos Recientes", ref: "browse:series", items: recientes.slice(0, 20) });
+    if (series.length > 0) rows.push({ id: "catalogo-series", title: "Catálogo de Series", ref: "browse:series", items: series.slice(0, 20) });
 
-  // Pestaña 3: Solo Anime
+  // Pestaña 3: Anime (Ruta corregida a /animes)
   } else if (chosen === "anime") {
-    const htmlAnime = await fetchPage("/generos/anime");
+    const htmlAnime = await fetchPage("/animes");
     const animeList = extractItems(htmlAnime);
     
     if (animeList.length > 0) heroItem = animeList[0];
-    if (animeList.length > 0) rows.push({ id: "anime", title: "Catálogo de Anime", ref: "browse:generos:anime", items: animeList.slice(0, 20) });
+    if (animeList.length > 0) rows.push({ id: "anime", title: "Catálogo de Anime", ref: "browse:animes", items: animeList.slice(0, 20) });
 
-  // Pestaña 4: Solo Doramas
+  // Pestaña 4: Doramas
   } else if (chosen === "doramas") {
     const htmlDoramas = await fetchPage("/generos/dorama");
     const doramasList = extractItems(htmlDoramas);
     
     if (doramasList.length > 0) heroItem = doramasList[0];
     if (doramasList.length > 0) rows.push({ id: "doramas", title: "Catálogo de Doramas", ref: "browse:generos:dorama", items: doramasList.slice(0, 20) });
+  
+  // Pestaña 5: Géneros
+  } else if (chosen === "generos") {
+    const genrePaths = [
+      { id: "accion", title: "Acción", path: "/generos/accion" },
+      { id: "comedia", title: "Comedia", path: "/generos/comedia" },
+      { id: "terror", title: "Terror", path: "/generos/terror" },
+      { id: "ciencia-ficcion", title: "Ciencia Ficción", path: "/generos/ciencia-ficcion" },
+      { id: "drama", title: "Drama", path: "/generos/drama" },
+      { id: "animacion", title: "Animación", path: "/generos/animacion" }
+    ];
+
+    for (const g of genrePaths) {
+      const html = await fetchPage(g.path);
+      const items = extractItems(html);
+      if (items.length > 0) {
+        if (!heroItem) heroItem = items[0];
+        rows.push({ id: g.id, title: g.title, ref: `browse:genero:${g.id}`, items: items.slice(0, 20) });
+      }
+    }
   }
 
   let hero = { title: "PelisPop", text: "Explora el mejor contenido." };
   if (heroItem) {
     hero = {
       title: heroItem.title,
-      text: chosen === "series" ? "Disfruta de esta serie destacada." : "Disfruta de este contenido destacado.",
+      text: "Disfruta de este contenido destacado.",
       image: heroItem.poster
     };
   }
@@ -201,24 +223,28 @@ export async function section({ tab }) {
   return { tabs, tab: chosen, hero, rows };
 }
 
-// --- PAGINACIÓN CORREGIDA (PARA QUE FUNCIONE EL "VER MÁS") ---
+// --- BROWSE (CORRECCIÓN RUTAS PAGINACIÓN) ---
 export async function browse(ref, cursor) {
   const page = parseInt(cursor, 10) || 1;
   let url = "";
 
-  // TRUCO: Si es la página 1, NO agregamos "/page/1" para evitar el error 404 de Pelispop.
-  const pagePath = page > 1 ? `page/${page}/` : "";
-
   if (ref === "browse:peliculas") {
-    url = `https://pelispop.mov/peliculas/${pagePath}`;
+    url = "https://pelispop.mov/peliculas";
   } else if (ref === "browse:series") {
-    url = `https://pelispop.mov/series/${pagePath}`;
+    url = "https://pelispop.mov/series";
+  } else if (ref === "browse:animes") {  // <- Agregado para el Ver más de Animes
+    url = "https://pelispop.mov/animes";
   } else if (ref.startsWith("browse:genero:")) {
     const genre = ref.split(":")[2];
-    url = `https://pelispop.mov/genero/${genre}/${pagePath}`;
-  } else if (ref.startsWith("browse:generos:")) { 
+    url = `https://pelispop.mov/generos/${genre}`;
+  } else if (ref.startsWith("browse:generos:")) { // Para doramas
     const genre = ref.split(":")[2];
-    url = `https://pelispop.mov/generos/${genre}/${pagePath}`;
+    url = `https://pelispop.mov/generos/${genre}`;
+  }
+
+  // Añadimos la página sin la barra diagonal al final
+  if (page > 1) {
+    url += `/page/${page}`;
   }
 
   if (!url) return { items: [] };
@@ -230,7 +256,6 @@ export async function browse(ref, cursor) {
 
   return {
     items: items,
-    // Activamos el scroll infinito
     next: items.length > 0 ? String(page + 1) : null 
   };
 }
