@@ -99,28 +99,63 @@ export async function home() {
   return rows;
 }
 
-// --- PESTAÑA NATIVA DE CATEGORÍAS (LISTA COMPLETA DE GÉNEROS) ---
+// --- PESTAÑA NATIVA DE CATEGORÍAS CORREGIDA ---
 export async function categories() {
   return [
-    { id: "accion", title: "Acción", ref: "browse:genero:accion" },
-    { id: "animacion", title: "Animación", ref: "browse:genero:animacion" },
-    { id: "aventura", title: "Aventura", ref: "browse:genero:aventura" },
-    { id: "belica", title: "Bélica", ref: "browse:genero:belica" },
-    { id: "ciencia-ficcion", title: "Ciencia Ficción", ref: "browse:genero:ciencia-ficcion" },
-    { id: "comedia", title: "Comedia", ref: "browse:genero:comedia" },
-    { id: "crimen", title: "Crimen", ref: "browse:genero:crimen" },
-    { id: "documental", title: "Documental", ref: "browse:genero:documental" },
-    { id: "drama", title: "Drama", ref: "browse:genero:drama" },
-    { id: "fantasia", title: "Fantasía", ref: "browse:genero:fantasia" },
-    { id: "familia", title: "Familia", ref: "browse:genero:familia" },
-    { id: "guerra", title: "Guerra", ref: "browse:genero:guerra" },
-    { id: "historia", title: "Historia", ref: "browse:genero:historia" },
-    { id: "romance", title: "Romance", ref: "browse:genero:romance" },
-    { id: "suspense", title: "Suspense", ref: "browse:genero:suspense" },
-    { id: "terror", title: "Terror", ref: "browse:genero:terror" },
-    { id: "western", title: "Western", ref: "browse:genero:western" },
-    { id: "misterio", title: "Misterio", ref: "browse:genero:misterio" }
+    { id: "accion", title: "Acción", ref: "/generos/accion" },
+    { id: "animacion", title: "Animación", ref: "/generos/animacion" },
+    { id: "aventura", title: "Aventura", ref: "/generos/aventura" },
+    { id: "belica", title: "Bélica", ref: "/generos/belica" },
+    { id: "ciencia-ficcion", title: "Ciencia Ficción", ref: "/generos/ciencia-ficcion" },
+    { id: "comedia", title: "Comedia", ref: "/generos/comedia" },
+    { id: "crimen", title: "Crimen", ref: "/generos/crimen" },
+    { id: "documental", title: "Documental", ref: "/generos/documental" },
+    { id: "drama", title: "Drama", ref: "/generos/drama" },
+    { id: "fantasia", title: "Fantasía", ref: "/generos/fantasia" },
+    { id: "familia", title: "Familia", ref: "/generos/familia" },
+    { id: "guerra", title: "Guerra", ref: "/generos/guerra" },
+    { id: "historia", title: "Historia", ref: "/generos/historia" },
+    { id: "romance", title: "Romance", ref: "/generos/romance" },
+    { id: "suspense", title: "Suspense", ref: "/generos/suspense" },
+    { id: "terror", title: "Terror", ref: "/generos/terror" },
+    { id: "western", title: "Western", ref: "/generos/western" },
+    { id: "misterio", title: "Misterio", ref: "/generos/misterio" }
   ];
+}
+
+// --- BROWSE (PAGINACIÓN EXACTA Y SCROLL INFINITO CORREGIDO) ---
+export async function browse(ref, cursor) {
+  const page = parseInt(cursor, 10) || 1;
+  
+  if (!ref) return { items: [] };
+
+  // Si por alguna razón extraña llega un ref antiguo, lo limpiamos para evitar el error
+  let cleanRef = ref;
+  if (ref.startsWith("browse:")) {
+    const parts = ref.split(":");
+    cleanRef = `/generos/${parts[parts.length - 1]}`;
+  }
+
+  let url = `https://pelispop.mov${cleanRef}`;
+
+  // Usamos la estructura de paginación con ?page=2 o &page=2
+  if (page > 1) {
+    url += url.includes("?") ? `&page=${page}` : `?page=${page}`;
+  }
+
+  const r = await kino.fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+  if (!r.ok) return { items: [] };
+  
+  const items = extractItems(await r.text());
+
+  if (cleanRef === "/" && page === 1) {
+    return { items, next: null };
+  }
+
+  return {
+    items: items,
+    next: items.length >= 10 ? String(page + 1) : null 
+  };
 }
 
 // --- SISTEMA DE PESTAÑAS (INCLUYENDO "POPULARES" EN TODAS) ---
