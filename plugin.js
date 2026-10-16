@@ -256,7 +256,6 @@ export async function browse(ref, cursor) {
     next: items.length >= 10 ? String(page + 1) : null 
   };
 }
-// --- LISTA DE CAPÍTULOS (SOLO PARA SERIES) ---
 export async function episodes(ref) {
   // Obtenemos la URL principal si el enlace apunta a un capítulo
   const mainUrl = ref.includes('/temporada/') ? ref.split('/temporada/')[0] : ref;
@@ -329,16 +328,29 @@ export async function episodes(ref) {
     episodesList.sort((a, b) => a.season - b.season || a.number - b.number);
   }
 
+  const isMovie = episodesList.length === 0;
+
   // Si no hay episodios, devolvemos un único botón para la película
-  if (episodesList.length === 0) {
-    episodesList.push({ season: 1, number: 1, ref: mainUrl, title: "Reproducir" });
+  if (isMovie) {
+    episodesList.push({ 
+      season: 1, 
+      number: 1, 
+      ref: mainUrl, 
+      title: "Reproducir",
+      overview: metadata.overview || ""
+    });
   }
 
   const result = { episodes: episodesList };
   
-  // Inyectamos la metadata para que Kino la dibuje en la interfaz
+  // LA CORRECCIÓN CLAVE: Asignar correctamente "movie" o "series"
   if (Object.keys(metadata).length > 0) {
-    result.series = metadata; 
+    if (isMovie) {
+      result.movie = metadata;
+      result.overview = metadata.overview || ""; // Respaldo para Kino
+    } else {
+      result.series = metadata; 
+    }
   }
 
   return result;
